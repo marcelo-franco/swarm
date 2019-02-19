@@ -1,0 +1,93 @@
+version: '3.7' # use, no mínimo, a versão 3.7 para rollback
+services:
+    redis:
+        image: redis
+        healthcheck:
+            test: ["CMD", "redis-healthcheck"]
+            interval: 5s
+            timeout: 3s
+            retries: 3
+            start_period: 60s
+        deploy:
+            replicas: 1
+            update_config:
+                failure_action: rollback
+        configs:
+            - source: redis-healthcheck
+              target: /usr/local/bin/redis-healthcheck
+              mode: 0555
+        networks:
+            - frontend
+    db:
+        image: postgres:10
+        healthcheck:
+            test: ["CMD", "postgres-healthcheck"]
+            interval: 5s
+            timeout: 3s
+            retries: 3
+            start_period: 60s
+        deploy:
+            replicas: 1
+            update_config:
+                failure_action: rollback
+        configs:
+            - source: postgres-healthcheck
+              target: /usr/local/bin/postgres-healthcheck
+              mode: 0555
+        volumes:
+            - db-data:/var/lib/postgresql/data
+        networks:
+            - backend
+    vote:
+        image: mfrancoatdocker/examplevotingapp_vote:curl
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+            interval: 5s
+            timeout: 3s
+            retries: 3
+            start_period: 15s
+        deploy:
+          replicas: 2
+          update_config:
+            failure_action: rollback
+            order: start-first
+        ports:
+            - '5000:80'
+        networks:
+            - frontend
+    result:
+        image: dockersamples/examplevotingapp_result:before
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+            interval: 5s
+            timeout: 3s
+            retries: 3
+            start_period: 15s
+        deploy:
+            replicas: 2
+            update_config:
+                failure_action: rollback
+                order: start-first
+        ports:
+            - '5001:80'
+        networks:
+            - backend
+    worker:
+        image: mfrancoatdocker/examplevotingapp_worker:java
+        deploy:
+            replicas: 2
+            update_config:
+                failure_action: rollback
+        networks:
+            - frontend
+            - backend
+networks:
+    frontend:
+    backend:
+volumes:
+    db-data:
+configs:
+    redis-healthcheck:
+        file: ./redis-healthcheck
+    postgres-healthcheck:
+        file: ./postgres-healthcheck
